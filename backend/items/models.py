@@ -1,6 +1,5 @@
 from django.db import models
 
-# Create your models here.
 
 class Item(models.Model):
     class Group(models.TextChoices):
@@ -13,7 +12,7 @@ class Item(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-         # Names can repeat across groups, but not within the same group.
+        # Names can repeat across groups, but not within the same group
         constraints = [
             models.UniqueConstraint(
                 fields=['group', 'name'],

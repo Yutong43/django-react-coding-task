@@ -1,8 +1,4 @@
-# from django.shortcuts import render
-
-# Create your views here.
-
-from rest_framework import generics  # Generic views for the item API.
+from rest_framework import generics
 
 from .models import Item
 from .serializers import ItemSerializer
