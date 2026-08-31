@@ -130,3 +130,44 @@ class ItemAPITests(APITestCase):
             status.HTTP_404_NOT_FOUND,
         )
         self.assertIn('detail', response.data)
+
+    def test_invalid_group_returns_400(self):
+        response = self.client.post(
+            self.list_url,
+            {'name': 'Wood', 'group': 'Unknown'},
+            format='json',
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn('group', response.data)
+        self.assertEqual(Item.objects.count(), 1)
+
+    def test_timestamps_are_read_only(self):
+        supplied_timestamp = '2000-01-01T00:00:00Z'
+
+        response = self.client.post(
+            self.list_url,
+            {
+                'name': 'Wood',
+                'group': Item.Group.SECONDARY,
+                'created_at': supplied_timestamp,
+                'updated_at': supplied_timestamp,
+            },
+            format='json',
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertNotEqual(
+            response.data['created_at'],
+            supplied_timestamp,
+        )
+        self.assertNotEqual(
+            response.data['updated_at'],
+            supplied_timestamp,
+        )
