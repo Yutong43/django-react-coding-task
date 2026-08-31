@@ -15,6 +15,20 @@ interface ApiErrorResponse {
   name?: string[]
   group?: string[]
   non_field_errors?: string[]
+  detail?: string
+}
+
+function getApiErrorMessage(
+  data: ApiErrorResponse,
+  fallbackMessage: string,
+) {
+  return (
+    data.non_field_errors?.[0] ??
+    data.name?.[0] ??
+    data.group?.[0] ??
+    data.detail ??
+    fallbackMessage
+  )
 }
 
 // Keep API calls pointed at the same backend
@@ -33,6 +47,12 @@ function App() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+
+  const [editName, setEditName] = useState('')
+  const [editGroup, setEditGroup] = useState<ItemGroup>('Primary')
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [updateError, setUpdateError] = useState('')
+  const [updateMessage, setUpdateMessage] = useState('')
 
   // Load items when the page opens
   useEffect(() => {
@@ -89,13 +109,11 @@ function App() {
       const data: Item | ApiErrorResponse = await response.json()
 
       if (!response.ok) {
-        const apiError = data as ApiErrorResponse
-
         throw new Error(
-          apiError.non_field_errors?.[0] ??
-            apiError.name?.[0] ??
-            apiError.group?.[0] ??
+          getApiErrorMessage(
+            data as ApiErrorResponse,
             'Could not create item.',
+          ),
         )
       }
 
@@ -116,6 +134,8 @@ function App() {
   async function handleSelectItem(id: number) {
     setIsDetailLoading(true)
     setDetailError('')
+    setUpdateError('')
+    setUpdateMessage('')
 
     try {
       const response = await fetch(`${API_URL}${id}/`)
@@ -129,7 +149,10 @@ function App() {
       }
 
       const data: Item = await response.json()
+
       setSelectedItem(data)
+      setEditName(data.name)
+      setEditGroup(data.group)
     } catch (caughtError) {
       setSelectedItem(null)
       setDetailError(
@@ -139,6 +162,74 @@ function App() {
       )
     } finally {
       setIsDetailLoading(false)
+    }
+  }
+
+  // Update the selected item and keep the list in sync
+  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedItem) {
+      return
+    }
+
+    const trimmedName = editName.trim()
+
+    if (!trimmedName) {
+      setUpdateError('Name is required.')
+      return
+    }
+
+    setIsUpdating(true)
+    setUpdateError('')
+    setUpdateMessage('')
+
+    try {
+      const response = await fetch(`${API_URL}${selectedItem.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          group: editGroup,
+        }),
+      })
+
+      const data: Item | ApiErrorResponse = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Item not found.')
+        }
+
+        throw new Error(
+          getApiErrorMessage(
+            data as ApiErrorResponse,
+            'Could not update item.',
+          ),
+        )
+      }
+
+      const updatedItem = data as Item
+
+      setSelectedItem(updatedItem)
+      setEditName(updatedItem.name)
+      setEditGroup(updatedItem.group)
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === updatedItem.id ? updatedItem : item,
+        ),
+      )
+      setUpdateMessage('Item updated.')
+    } catch (caughtError) {
+      setUpdateError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Could not update item.',
+      )
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -161,7 +252,9 @@ function App() {
         <select
           id="item-group"
           value={group}
-          onChange={(event) => setGroup(event.target.value as ItemGroup)}
+          onChange={(event) =>
+            setGroup(event.target.value as ItemGroup)
+          }
         >
           <option value="Primary">Primary</option>
           <option value="Secondary">Secondary</option>
@@ -209,28 +302,77 @@ function App() {
         )}
 
         {!isDetailLoading && !detailError && selectedItem && (
-          <dl>
-            <div>
-              <dt>ID</dt>
-              <dd>{selectedItem.id}</dd>
-            </div>
-            <div>
-              <dt>Name</dt>
-              <dd>{selectedItem.name}</dd>
-            </div>
-            <div>
-              <dt>Group</dt>
-              <dd>{selectedItem.group}</dd>
-            </div>
-            <div>
-              <dt>Created</dt>
-              <dd>{new Date(selectedItem.created_at).toLocaleString()}</dd>
-            </div>
-            <div>
-              <dt>Last updated</dt>
-              <dd>{new Date(selectedItem.updated_at).toLocaleString()}</dd>
-            </div>
-          </dl>
+          <>
+            <dl>
+              <div>
+                <dt>ID</dt>
+                <dd>{selectedItem.id}</dd>
+              </div>
+              <div>
+                <dt>Name</dt>
+                <dd>{selectedItem.name}</dd>
+              </div>
+              <div>
+                <dt>Group</dt>
+                <dd>{selectedItem.group}</dd>
+              </div>
+              <div>
+                <dt>Created</dt>
+                <dd>
+                  {new Date(
+                    selectedItem.created_at,
+                  ).toLocaleString()}
+                </dd>
+              </div>
+              <div>
+                <dt>Last updated</dt>
+                <dd>
+                  {new Date(
+                    selectedItem.updated_at,
+                  ).toLocaleString()}
+                </dd>
+              </div>
+            </dl>
+
+            <h3>Update item</h3>
+
+            <form onSubmit={handleUpdate}>
+              <label htmlFor="edit-item-name">Name</label>
+              <input
+                id="edit-item-name"
+                type="text"
+                value={editName}
+                maxLength={100}
+                required
+                onChange={(event) =>
+                  setEditName(event.target.value)
+                }
+              />
+
+              <label htmlFor="edit-item-group">Group</label>
+              <select
+                id="edit-item-group"
+                value={editGroup}
+                onChange={(event) =>
+                  setEditGroup(
+                    event.target.value as ItemGroup,
+                  )
+                }
+              >
+                <option value="Primary">Primary</option>
+                <option value="Secondary">Secondary</option>
+              </select>
+
+              <button type="submit" disabled={isUpdating}>
+                {isUpdating ? 'Updating...' : 'Update Item'}
+              </button>
+            </form>
+
+            {updateError && <p role="alert">{updateError}</p>}
+            {updateMessage && (
+              <p role="status">{updateMessage}</p>
+            )}
+          </>
         )}
       </section>
     </main>
