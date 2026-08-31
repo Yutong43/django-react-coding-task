@@ -1,38 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
+
+import {
+  createItem,
+  fetchItem,
+  fetchItems,
+  updateItem,
+  type Item,
+  type ItemGroup,
+} from './api/items'
 import './App.css'
-
-type ItemGroup = 'Primary' | 'Secondary'
-
-interface Item {
-  id: number
-  name: string
-  group: ItemGroup
-  created_at: string
-  updated_at: string
-}
-
-interface ApiErrorResponse {
-  name?: string[]
-  group?: string[]
-  non_field_errors?: string[]
-  detail?: string
-}
-
-function getApiErrorMessage(
-  data: ApiErrorResponse,
-  fallbackMessage: string,
-) {
-  return (
-    data.non_field_errors?.[0] ??
-    data.name?.[0] ??
-    data.group?.[0] ??
-    data.detail ??
-    fallbackMessage
-  )
-}
-
-// Keep API calls pointed at the same backend
-const API_URL = 'http://127.0.0.1:8000/items/'
 
 function App() {
   const [items, setItems] = useState<Item[]>([])
@@ -58,13 +34,7 @@ function App() {
   useEffect(() => {
     async function loadItems() {
       try {
-        const response = await fetch(API_URL)
-
-        if (!response.ok) {
-          throw new Error('Could not load items.')
-        }
-
-        const data: Item[] = await response.json()
+        const data = await fetchItems()
         setItems(data)
       } catch (caughtError) {
         setLoadError(
@@ -95,29 +65,12 @@ function App() {
     setFormError('')
 
     try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: trimmedName,
-          group,
-        }),
+      const createdItem = await createItem({
+        name: trimmedName,
+        group,
       })
 
-      const data: Item | ApiErrorResponse = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          getApiErrorMessage(
-            data as ApiErrorResponse,
-            'Could not create item.',
-          ),
-        )
-      }
-
-      setItems((currentItems) => [...currentItems, data as Item])
+      setItems((currentItems) => [...currentItems, createdItem])
       setName('')
     } catch (caughtError) {
       setFormError(
@@ -138,17 +91,7 @@ function App() {
     setUpdateMessage('')
 
     try {
-      const response = await fetch(`${API_URL}${id}/`)
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Item not found.')
-        }
-
-        throw new Error('Could not load item details.')
-      }
-
-      const data: Item = await response.json()
+      const data = await fetchItem(id)
 
       setSelectedItem(data)
       setEditName(data.name)
@@ -185,33 +128,10 @@ function App() {
     setUpdateMessage('')
 
     try {
-      const response = await fetch(`${API_URL}${selectedItem.id}/`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: trimmedName,
-          group: editGroup,
-        }),
+      const updatedItem = await updateItem(selectedItem.id, {
+        name: trimmedName,
+        group: editGroup,
       })
-
-      const data: Item | ApiErrorResponse = await response.json()
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Item not found.')
-        }
-
-        throw new Error(
-          getApiErrorMessage(
-            data as ApiErrorResponse,
-            'Could not update item.',
-          ),
-        )
-      }
-
-      const updatedItem = data as Item
 
       setSelectedItem(updatedItem)
       setEditName(updatedItem.name)
@@ -308,14 +228,17 @@ function App() {
                 <dt>ID</dt>
                 <dd>{selectedItem.id}</dd>
               </div>
+
               <div>
                 <dt>Name</dt>
                 <dd>{selectedItem.name}</dd>
               </div>
+
               <div>
                 <dt>Group</dt>
                 <dd>{selectedItem.group}</dd>
               </div>
+
               <div>
                 <dt>Created</dt>
                 <dd>
@@ -324,6 +247,7 @@ function App() {
                   ).toLocaleString()}
                 </dd>
               </div>
+
               <div>
                 <dt>Last updated</dt>
                 <dd>
@@ -369,6 +293,7 @@ function App() {
             </form>
 
             {updateError && <p role="alert">{updateError}</p>}
+
             {updateMessage && (
               <p role="status">{updateMessage}</p>
             )}
