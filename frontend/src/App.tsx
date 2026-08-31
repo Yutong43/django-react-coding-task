@@ -17,7 +17,7 @@ interface ApiErrorResponse {
   non_field_errors?: string[]
 }
 
-// Keep the backend address in one place so every API call uses the same URL
+// Keep API calls pointed at the same backend
 const API_URL = 'http://127.0.0.1:8000/items/'
 
 function App() {
@@ -30,7 +30,11 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // Load the current items when the page opens.
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+
+  // Load items when the page opens
   useEffect(() => {
     async function loadItems() {
       try {
@@ -56,7 +60,7 @@ function App() {
     void loadItems()
   }, [])
 
-  // Send the form data to Django and add the returned item to the page.
+  // Create an item and append the API response to the list
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -108,6 +112,36 @@ function App() {
     }
   }
 
+  // Fetch a fresh copy for the detail panel
+  async function handleSelectItem(id: number) {
+    setIsDetailLoading(true)
+    setDetailError('')
+
+    try {
+      const response = await fetch(`${API_URL}${id}/`)
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Item not found.')
+        }
+
+        throw new Error('Could not load item details.')
+      }
+
+      const data: Item = await response.json()
+      setSelectedItem(data)
+    } catch (caughtError) {
+      setSelectedItem(null)
+      setDetailError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Could not load item details.',
+      )
+    } finally {
+      setIsDetailLoading(false)
+    }
+  }
+
   return (
     <main>
       <h1>Item Manager</h1>
@@ -150,13 +184,55 @@ function App() {
             <ul>
               {items.map((item) => (
                 <li key={item.id}>
-                  {item.name} — {item.group}
+                  <button
+                    type="button"
+                    aria-pressed={selectedItem?.id === item.id}
+                    onClick={() => void handleSelectItem(item.id)}
+                  >
+                    {item.name} — {item.group}
+                  </button>
                 </li>
               ))}
             </ul>
           )}
         </>
       )}
+
+      <section aria-labelledby="item-details-heading">
+        <h2 id="item-details-heading">Item details</h2>
+
+        {isDetailLoading && <p>Loading item details...</p>}
+        {detailError && <p role="alert">{detailError}</p>}
+
+        {!isDetailLoading && !detailError && !selectedItem && (
+          <p>Select an item to review its details.</p>
+        )}
+
+        {!isDetailLoading && !detailError && selectedItem && (
+          <dl>
+            <div>
+              <dt>ID</dt>
+              <dd>{selectedItem.id}</dd>
+            </div>
+            <div>
+              <dt>Name</dt>
+              <dd>{selectedItem.name}</dd>
+            </div>
+            <div>
+              <dt>Group</dt>
+              <dd>{selectedItem.group}</dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>{new Date(selectedItem.created_at).toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{new Date(selectedItem.updated_at).toLocaleString()}</dd>
+            </div>
+          </dl>
+        )}
+      </section>
     </main>
   )
 }
